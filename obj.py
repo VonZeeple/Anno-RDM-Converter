@@ -1,6 +1,5 @@
 from typing import NamedTuple
 from typing import List
-from struct import *
 
 
 class OBJGroup(NamedTuple):
@@ -20,19 +19,23 @@ class OBJFile(NamedTuple):
     objects: List[OBJObject]
 
 
-def write_obj_file(filename, obj_group):
+def write_obj_file(filename, obj_file):
     with open(filename, 'w') as f:
-        for v in obj_group.vertices:
-            f.write("v {0:f} {1:f} {2:f}\n".format(*v))
-        for v in obj_group.uv:
-            f.write("vt {0:f} {1:f}\n".format(*v))
-        for v in obj_group.normals:
-            f.write("vn {0:f} {1:f} {2:f}\n".format(*v))
-        for face in obj_group.faces:
-            s = ''
-            for v in face:
-                s += ' {0:}/{1:}/{2:}'.format(*v).replace('None', '')
-            f.write("f" + s + "\n")
+        for object in obj_file.objects:
+            f.write("o {:}\n".format(object.name))
+            for obj_group in object.groups:
+                f.write("g {:}\n".format(obj_group.name))
+                for v in obj_group.vertices:
+                    f.write("v {0:f} {1:f} {2:f}\n".format(*v))
+                for v in obj_group.uv:
+                    f.write("vt {0:f} {1:f}\n".format(*v))
+                for v in obj_group.normals:
+                    f.write("vn {0:f} {1:f} {2:f}\n".format(*v))
+                for face in obj_group.faces:
+                    s = ''
+                    for v in face:
+                        s += ' {0:}/{1:}/{2:}'.format(*v).replace('None', '')
+                    f.write("f" + s + "\n")
 
 
 def parse_obj_file(filename):

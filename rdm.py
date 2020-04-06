@@ -10,9 +10,82 @@ class NotRDMError(Exception):
 class IntegerArrayError(Exception):
     pass
 
-
 class VertexSizeError(Exception):
     pass
+class VertexPackingError(Exception):
+    pass
+
+vertex_formats = {8: r'P4h',
+                  16: r'P4h_T2h_C4c',
+                  20: r'P4h_N4b_T2h_I4b',
+                  24: r'P4h_N4b_G4b_B4b_T2h',
+                  28: r'P4h_N4b_G4b_B4b_T2h_I4b',
+                  32: r'P4h_N4b_G4b_B4b_T2h_C4b_C4b',
+                  56: r'P4h_N4b_G4b_B4b_T2h_I4b_I4b_I4b_I4b_W4b_W4b_W4b_W4b',
+                  # 60: r'P3f_N3b_37_T2f',
+                  # 64: r'P3f_N3b_41_T2f',
+                  # 68: r'P3f_N3b_45_T2f',
+                  # 72: r'P3f_N3b_49_T2f',
+                  }
+vertex_length = {v: k for k, v in vertex_formats.items()}
+data_size = {'e': 2, 'f': 4, 'b': 1, 'B': 1, 'c': 1}
+
+# TODO use dataclass
+class Vertex(dict):
+    @staticmethod
+    def parse(data):
+        v_size = len(data)
+        if v_size not in vertex_formats.keys():
+            raise VertexSizeError
+
+        letter_to_arg = {'P': 'pos', 'T': 'tex', 'N': 'norm', 'I': 'unknown_I'}
+        format_str = vertex_formats[v_size]
+        vertex_arg = {'vformat': format_str}
+        i = 0
+        for s in format_str.replace('h', 'e').replace('b', 'B').split('_'):
+            # TODO: implement regex for >56 bytes vertex
+            num_data = int(s[1])
+            if s[0] in letter_to_arg.keys():
+                vertex_arg[letter_to_arg[s[0]]] = unpack(s[1:3], data[i:i + int(s[1]) * data_size[s[2]]])
+            i += num_data * data_size[s[2]]
+        return Vertex(vertex_arg)
+
+    def pack(self):
+        format_str = self['vformat']
+        letter_to_arg = {'P': 'pos', 'T': 'tex', 'N': 'norm'}
+        out = bytearray()
+        for s in format_str.replace('h', 'e').replace('b', 'B').split('_'):
+            # TODO: implement regex for >56 bytes vertex
+            out += pack(s[1:3], *self.get(letter_to_arg.get(s[0], ''), [0]*s[1]))
+        if len(out) != vertex_length[format_str]:
+            raise VertexPackingError
+        return out
+
+
+class TriangleSizeError(Exception):
+    pass
+
+
+triangle_formats = {2: r'HHH',
+                    4: r'III',
+                    }
+
+
+class Triangle(NamedTuple):
+    format: str
+    indices: List[int]
+
+    @staticmethod
+    def parse(data):
+        t_size = int(len(data) / 3)
+        if t_size not in triangle_formats.keys():
+            raise TriangleSizeError
+        indices = unpack(triangle_formats[t_size], data)
+        return Triangle(format=triangle_formats[t_size], indices=list(indices))
+
+    def pack(self):
+        out = pack(self.format, *self.indices)
+        return out
 
 
 class SingleInt(int):
@@ -197,14 +270,22 @@ class MeshRecord(Record):
         data[n0 + 8:n0 + 8 + 4 * len(header)] = pack(str(len(header)) + 'I', *header)
         return n0 + 8
 
+
 class UnknownRecord(Record):
+    """"Purpose of this is unknown"""
     @staticmethod
     def parse(data, offset):
         header, = IntArray.parse(data, offset)
         child = {'unknown_{:}'.format(i): IntArray.parse(data, h) for i, h in enumerate(header)}
         return UnknownRecord(child)
 
+
 class Material(NamedTuple):
+    """"Has 3 attributes:
+     - name
+     - texture
+     - flag
+     """
     name: AnnoString
     texture: AnnoString
     flag: SingleInt
@@ -233,7 +314,9 @@ class Material(NamedTuple):
 
 
 class MaterialsRecord(Record):
-    # num = 7
+    """"A list of all materials. Contains usually 7 fields:
+     - material_#
+     some of them can be None"""
     @staticmethod
     def parse(data, offset):
         header = IntArray.parse(data, offset)
@@ -260,7 +343,11 @@ class MaterialsRecord(Record):
 
 
 class MainRecord(Record):
-    # num = 12
+    """"Contains usually 12 fields:
+     - strings
+     - mesh
+     - materials
+     - some unknown flags [9]"""
 
     @staticmethod
     def parse(data, offset):
@@ -276,6 +363,13 @@ class MainRecord(Record):
 
 
 class RDMFile(NamedTuple):
+    """"A RDM file is composed of:
+     - rdm_tag (3 char)
+     - dummy_char (byte)
+     - unknown_0: a list a int with unknown purpose
+     - main_record
+     """
+
     rdm_tag: str
     dummy_char: int
     unknown_0: List[int]
