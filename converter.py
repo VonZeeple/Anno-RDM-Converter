@@ -1,6 +1,33 @@
 from struct import *
 import rdm
 from obj import *
+import math
+
+
+def calc_tan(*args):
+    p1, p2, p3 = (v.get('pos') for v in args)
+    t1, t2, t3 = (v.get('tex') for v in args)
+    n1, n2, n3 = (convert_normal2obj(v.get('norm')) for v in args)
+    dp1 = [pa - pb for pa, pb in zip(p1, p2)]
+    dp2 = [pa - pb for pa, pb in zip(p3, p2)]
+    dt1 = [pa - pb for pa, pb in zip(t1, t2)]
+    dt2 = [pa - pb for pa, pb in zip(t3, t2)]
+
+    det = -(dt1[0] * dt2[1] - dt1[1] * dt2[0])
+
+    x = (dp1[0] * dt2[1] - dp2[0] * dt1[1]) / det
+    y = (dp1[1] * dt2[1] - dp2[1] * dt1[1]) / det
+    z = (dp1[2] * dt2[1] - dp2[2] * dt1[1]) / det
+    mag = math.sqrt(x ** 2 + y ** 2 + z ** 2)
+    tan = [x / mag, y / mag, z / mag]
+
+    x = n1[1]*tan[2]-n1[2]*tan[1]
+    y = n1[2]*tan[0]-n1[0]*tan[2]
+    z = n1[0]*tan[1]-n1[1]*tan[0]
+    mag = math.sqrt(x ** 2 + y ** 2 + z ** 2)
+    bitan = [x / mag, y / mag, z / mag]
+
+    return convert_normal2rdm(bitan), convert_normal2rdm(tan)
 
 
 def unpack_v_index(data):
@@ -14,17 +41,20 @@ def unpack_v_index(data):
 
 
 def convert_normal2obj(norm):
-    n_1 = [n * 1. / 255 * 2 - 1 for n in norm]
+    n_1 = [n * 1. / 127.5 - 1 for n in norm]
     return n_1
 
 
 def convert_normal2rdm(norm):
-    return [int((n + 1) * 255 / 2) for n in norm]
+    return [int((n + 1) * 127.5) for n in norm]
+
+def convert_uv(uv):
+    return [uv[0], 1 - uv[1]]
 
 
-def padding(vec, length):
+def padding(vec, length, value=0):
     if len(vec) < length:
-        return vec + [0] * (length - len(vec))
+        return vec + [value] * (length - len(vec))
     return vec
 
 
@@ -40,31 +70,45 @@ def obj_to_rdm(obj_file):
     obj_n = obj_file.normals
     obj_t = obj_file.uv
 
+    rdm_vertices = []
+    # We iterate over the number of objects, which become groups in the rdm file
     n = 0
     for i, obj in enumerate(obj_file.objects):
         groups['group_{:}'.format(i)] = rdm.Group(offset=n, size=len(obj.faces) * 3, n=i)
-        # TODO: check if more than 3 vertices per face
+
         for k, face in enumerate(obj.faces):
+            # We check that we have indeed triangles
+            if len(face) != 3:
+                raise ValueError("Faces should be triangles, not lines nor quads")
+
             for v in face:
                 if v in vertices:
+                    # The vertex has already been parsed
                     new_index = vertices.index(v)
                 else:
+                    # We obtain position and uv from the obj file
+                    v_tmp = [{'pos': obj_v[vk[0] - 1], 'tex': obj_t[vk[1] - 1], 'norm': obj_n[vk[2]-1]} for vk in face]
+                    # We compute here the tangent and bitangent for this face (very approximative atm)
+                    bitan, tan = calc_tan(*v_tmp)
+                    # We then parse the vertex
+                    vertex = rdm.Vertex({'vformat': 'P4h_N4b_G4b_B4b_T2h',
+                                         'pos': padding(obj_v[v[0] - 1], 4, value=0),
+                                         'norm': padding(convert_normal2rdm(obj_n[v[2] - 1]), 4, value=0),
+                                         'tex': convert_uv(obj_t[v[1] - 1]),
+                                         'tan': padding(tan, 4),
+                                         'bitan': padding(bitan, 4),
+                                         'unknown_I': (0, 0, 0, 0)}).pack()
+                    rdm_vertices.append(vertex)
                     vertices.append(v)
-                    new_index = len(vertices)-1
+                    new_index = len(vertices) - 1
 
-                faces.append(rdm.VertexIndex(format='I', index=new_index).pack())
+                faces.append(rdm.VertexIndex(format='H', index=new_index).pack())
                 n += 1
+
         name = rdm.AnnoString('group_{:}'.format(i).encode('ascii'))
         texture = rdm.AnnoString('dummy_texture.tga'.encode('ascii'))
         materials.append(rdm.Material(name=name, texture=texture, flag=rdm.SingleInt(0)))
 
-
-    #Now we parse all vertices
-    rdm_vertices = [rdm.Vertex({'vformat': 'P4h_N4b_T2h_I4b',
-                         'pos': padding(obj_v[v[0]-1], 4),
-                         'norm': convert_normal2rdm(padding(obj_n[v[2]-1], 4)),
-                         'tex': obj_t[v[1]-1],
-                         'unknown_I': (0, 0, 0, 0)}).pack() for v in vertices]
 
     # Now we create all the necessary records
     mesh_strings = rdm.StringRecord.from_strings(['mesh_name'] + [None] * 6)

@@ -43,7 +43,7 @@ class Vertex(dict):
         if v_size not in vertex_formats.keys():
             raise VertexSizeError
 
-        letter_to_arg = {'P': 'pos', 'T': 'tex', 'N': 'norm', 'I': 'unknown_I'}
+        letter_to_arg = {'P': 'pos', 'T': 'tex', 'N': 'norm', 'I': 'unknown_I', 'G': 'tan', 'B': 'bitan'}
         format_str = vertex_formats[v_size]
         vertex_arg = {'vformat': format_str}
         i = 0
@@ -57,7 +57,7 @@ class Vertex(dict):
 
     def pack(self):
         format_str = self['vformat']
-        letter_to_arg = {'P': 'pos', 'T': 'tex', 'N': 'norm', 'I': 'unknown_I'}
+        letter_to_arg = {'P': 'pos', 'T': 'tex', 'N': 'norm', 'I': 'unknown_I', 'G': 'tan', 'B': 'bitan'}
         out = bytearray()
         for s in format_str.replace('h', 'e').replace('b', 'B').split('_'):
             # TODO: implement regex for >56 bytes vertex
@@ -379,9 +379,9 @@ class MainRecord(Record):
     def parse(data, offset):
         header, = IntArray.parse(data, offset)
         child = {
-            'Strings': StringRecord.parse(data, header[0]),
-            'Mesh': MeshRecord.parse(data, header[1]),
-            'Materials': MaterialsRecord.parse(data, header[2])
+            'strings': StringRecord.parse(data, header[0]),
+            'mesh': MeshRecord.parse(data, header[1]),
+            'materials': MaterialsRecord.parse(data, header[2])
         }
         for i in range(12 - 3):
             child['unknown_{:}'.format(i + 1)] = None
@@ -417,6 +417,11 @@ class RDMFile(NamedTuple):
         self.main_record.pack(data)
         return data
 
+
+def load_rdm_file(filename):
+    with open(filename, 'rb') as f:
+        data = f.read()
+    return RDMFile.parse(data)
 
 def write_rdm_file(filename, rdm_file):
     with open(filename, 'wb') as f:
