@@ -10,10 +10,14 @@ class NotRDMError(Exception):
 class IntegerArrayError(Exception):
     pass
 
+
 class VertexSizeError(Exception):
     pass
+
+
 class VertexPackingError(Exception):
     pass
+
 
 vertex_formats = {8: r'P4h',
                   16: r'P4h_T2h_C4c',
@@ -29,6 +33,7 @@ vertex_formats = {8: r'P4h',
                   }
 vertex_length = {v: k for k, v in vertex_formats.items()}
 data_size = {'e': 2, 'f': 4, 'b': 1, 'B': 1, 'c': 1}
+
 
 # TODO use dataclass
 class Vertex(dict):
@@ -52,11 +57,11 @@ class Vertex(dict):
 
     def pack(self):
         format_str = self['vformat']
-        letter_to_arg = {'P': 'pos', 'T': 'tex', 'N': 'norm'}
+        letter_to_arg = {'P': 'pos', 'T': 'tex', 'N': 'norm', 'I': 'unknown_I'}
         out = bytearray()
         for s in format_str.replace('h', 'e').replace('b', 'B').split('_'):
             # TODO: implement regex for >56 bytes vertex
-            out += pack(s[1:3], *self.get(letter_to_arg.get(s[0], ''), [0]*s[1]))
+            out += pack(s[1:3], *self.get(letter_to_arg.get(s[0], ''), [0] * int(s[1])))
         if len(out) != vertex_length[format_str]:
             raise VertexPackingError
         return out
@@ -66,25 +71,25 @@ class TriangleSizeError(Exception):
     pass
 
 
-triangle_formats = {2: r'HHH',
-                    4: r'III',
-                    }
+vertex_index_formats = {2: r'H',
+                        4: r'I',
+                        }
 
 
-class Triangle(NamedTuple):
+class VertexIndex(NamedTuple):
     format: str
-    indices: List[int]
+    index: int
 
     @staticmethod
     def parse(data):
-        t_size = int(len(data) / 3)
-        if t_size not in triangle_formats.keys():
+        t_size = int(len(data))
+        if t_size not in vertex_index_formats.keys():
             raise TriangleSizeError
-        indices = unpack(triangle_formats[t_size], data)
-        return Triangle(format=triangle_formats[t_size], indices=list(indices))
+        index, = unpack(vertex_index_formats[t_size], data)
+        return VertexIndex(format=vertex_index_formats[t_size], index=index)
 
     def pack(self):
-        out = pack(self.format, *self.indices)
+        out = pack(self.format, self.index)
         return out
 
 
@@ -124,6 +129,12 @@ class IntArray(list):
 
 
 class AnnoString(bytes):
+    @staticmethod
+    def from_string(string):
+        if string is None:
+            return None
+        return AnnoString(string.encode('ascii'))
+
     @staticmethod
     def parse(data, offset):
         if offset >= 8:
@@ -182,6 +193,10 @@ class Record(dict):
 
 
 class StringRecord(Record):
+    @staticmethod
+    def from_strings(string_list):
+        child = {"string_{:}".format(i): AnnoString.from_string(s) for i, s in enumerate(string_list)}
+        return StringRecord(child)
 
     @staticmethod
     def parse(data, offset):
@@ -259,7 +274,7 @@ class MeshRecord(Record):
                 header[v] = self[k].pack(data)
             else:
                 header[v] = 0
-        #Loop over the rest
+        # Loop over the rest
         for i, (k, v) in enumerate(self.items()):
             if k in order.keys():
                 continue
@@ -273,6 +288,17 @@ class MeshRecord(Record):
 
 class UnknownRecord(Record):
     """"Purpose of this is unknown"""
+
+    @staticmethod
+    def from_list(list_in):
+        child = {}
+        for i, array in enumerate(list_in):
+            if array is None:
+                child['unknown_{:}'.format(i)] = None
+            else:
+                child['unknown_{:}'.format(i)] = IntArray(array)
+        return UnknownRecord(child)
+
     @staticmethod
     def parse(data, offset):
         header, = IntArray.parse(data, offset)
@@ -317,6 +343,7 @@ class MaterialsRecord(Record):
     """"A list of all materials. Contains usually 7 fields:
      - material_#
      some of them can be None"""
+
     @staticmethod
     def parse(data, offset):
         header = IntArray.parse(data, offset)
@@ -327,7 +354,7 @@ class MaterialsRecord(Record):
 
     def pack(self, data):
         n0 = len(data)
-        header = [[0]*7 for i in self]
+        header = [[0] * 7 for i in self]
         IntArray(header).pack(data)
         for i, (k, v) in enumerate(self.items()):
             if v is not None:
@@ -339,7 +366,6 @@ class MaterialsRecord(Record):
         _ = IntArray(header).pack(packed_header)
         data[n0:n0 + len(packed_header)] = packed_header
         return n0 + 8
-
 
 
 class MainRecord(Record):
@@ -381,12 +407,17 @@ class RDMFile(NamedTuple):
         if rdm_tag != b'RDM':
             raise NotRDMError
         unknown_0 = list(unpack('4I', data[4:20]))
-        return RDMFile(rdm_tag=rdm_tag, dummy_char=dummy_char, unknown_0=unknown_0,
+        return RDMFile(rdm_tag=rdm_tag.decode('ascii'), dummy_char=dummy_char, unknown_0=unknown_0,
                        main_record=MainRecord.parse(data, 28))
 
     def pack(self):
         data = bytearray()
-        data += pack('3sB', self.rdm_tag, self.dummy_char)
+        data += pack('3sB', self.rdm_tag.encode('ascii'), self.dummy_char)
         data += pack('4I', *self.unknown_0)
         self.main_record.pack(data)
         return data
+
+
+def write_rdm_file(filename, rdm_file):
+    with open(filename, 'wb') as f:
+        f.write(rdm_file.pack())

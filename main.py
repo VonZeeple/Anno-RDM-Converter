@@ -1,18 +1,17 @@
 import rdm
 from converter import *
-from obj import *
+import obj
 
 
-filename = 'D:/modding/Anno1800/data_Anno1800/data/graphics/buildings/production/workshop_colony01_01/rdm/workshop_colony01_01_lod0.rdm'
+filename = 'substation'
 
-with open(filename, 'rb') as f:
-    data_0 = f.read()
-rdm_file = rdm.RDMFile.parse(data_0)
+obj_file = obj.parse_obj_file(filename+'.obj')
+rdm_file = obj_to_rdm(obj_file)
 
+rdm.write_rdm_file(filename+'.rdm', rdm_file)
 
-write_obj_file('test_out.obj', rdm_to_obj(rdm_file))
+obj_file2 = rdm_to_obj(rdm_file)
+obj.write_obj_file(filename+'_copy.obj', obj_file2)
 
+#obj_file3 = obj.parse_obj_file(filename+'_copy.obj')
 
-
-# To convert from obj to RDM:
-# first check if all polygons are triangles

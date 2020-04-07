@@ -2,15 +2,9 @@ from typing import NamedTuple
 from typing import List
 
 
-class OBJGroup(NamedTuple):
-    name: str
-
-    faces: List[List[List[int]]]
-
-
 class OBJObject(NamedTuple):
     name: str
-    groups: List[OBJGroup]
+    faces: List[List[List[int]]]
 
 
 class OBJFile(NamedTuple):
@@ -30,16 +24,13 @@ def write_obj_file(filename, obj_file):
         for v in obj_file.normals:
             f.write("vn {0:f} {1:f} {2:f}\n".format(*v))
 
-        for object in obj_file.objects:
-            f.write("o {:}\n".format(object.name))
-            for obj_group in object.groups:
-                f.write("g {:}\n".format(obj_group.name))
-
-                for face in obj_group.faces:
-                    s = ''
-                    for v in face:
-                        s += ' {0:}/{1:}/{2:}'.format(*v).replace('None', '')
-                    f.write("f" + s + "\n")
+        for obj in obj_file.objects:
+            f.write("o {:}\n".format(obj.name))
+            for face in obj.faces:
+                s = ''
+                for v in face:
+                    s += ' {0:}/{1:}/{2:}'.format(*v).replace('None', '')
+                f.write("f" + s + "\n")
 
 
 # TODO handle objects and groups
@@ -62,6 +53,6 @@ def parse_obj_file(filename):
 
             if s[0] == 'f':
                 faces.append([[int(a) if a else None for a in s2.split('/')] for s2 in s[1::]])
-
-    return OBJGroup(name='unnamed', vertices=v_pos, normals=v_norm, uv=v_tex, faces=faces)
+    obj_object = OBJObject(name='unamed', faces=faces)
+    return OBJFile(vertices=v_pos, normals=v_norm, uv=v_tex, objects=[obj_object])
 
