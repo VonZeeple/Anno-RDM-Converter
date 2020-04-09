@@ -104,10 +104,12 @@ class IntArray(list):
         if offset < 8:
             return None
         num, size = unpack('II', data[offset - 8:offset])
-        out = [IntArray.unpack_ints(data[offset + i * size: offset + (i + 1) * size]) for i in range(num)]
+        out = tuple(IntArray.unpack_ints(data[offset + i * size: offset + (i + 1) * size]) for i in range(num))
         return IntArray(out)
 
     def pack(self, data):
+        if not self:
+            return 0
         n0 = len(data)
         n_1 = len(self)
         if isinstance(self[0], (list, tuple)):

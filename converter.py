@@ -4,10 +4,11 @@ from obj import *
 import math
 
 
-def calc_tan(*args):
-    p1, p2, p3 = (v.get('pos') for v in args)
-    t1, t2, t3 = (v.get('tex') for v in args)
-    n1, n2, n3 = (convert_normal2obj(v.get('norm')) for v in args)
+def calc_tan(v1, v2, v3):
+    """" Computes tangent and bitangent for a face. Input is 3 dictionnaries containing the keys pos, tex and norm"""
+    p1, p2, p3 = (v.get('pos') for v in [v1, v2, v3])
+    t1, t2, t3 = (v.get('tex') for v in [v1, v2, v3])
+    n1, n2, n3 = (convert_normal2obj(v.get('norm')) for v in [v1, v2, v3])
     dp1 = [pa - pb for pa, pb in zip(p1, p2)]
     dp2 = [pa - pb for pa, pb in zip(p3, p2)]
     dt1 = [pa - pb for pa, pb in zip(t1, t2)]
