@@ -1,6 +1,6 @@
 from struct import *
-import rdm
-from obj import *
+from anno_rdm_converter import rdm
+from anno_rdm_converter.obj import *
 import math
 
 

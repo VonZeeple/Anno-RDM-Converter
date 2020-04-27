@@ -1,5 +1,4 @@
-import converter
-import rdm
+from anno_rdm_converter import converter, rdm
 import pytest
 
 v2 = {'pos': [0.1, 0.1, 0.1], 'norm': [1.0, 0, 0], 'tex': [1.0, 1.0]}
@@ -63,3 +62,7 @@ def test_parse_int_array_errors(input_list, input_bytes, typename, value):
         rdm.IntArray(input_list).pack(input_bytes)
     assert str(error.typename) == typename
     assert str(error.value) == value
+
+
+
+

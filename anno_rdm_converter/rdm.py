@@ -253,17 +253,27 @@ class MeshRecord(Record):
 
     @staticmethod
     def parse(data, offset):
-        header, = IntArray.parse(data, offset)
-        child = {'strings': StringRecord.parse(data, header[0]),
-                 'unknown_0': UnknownRecord.parse(data, header[1]),
-                 'unknown_1': IntArray.parse(data, header[2]),
-                 'vertices': DataArray.parse(data, header[3]),
-                 'faces': DataArray.parse(data, header[4]),
-                 'groups': GroupRecord.parse(data, header[5])
-                 }
-        for i in range(6, len(header)):
-            child['unknown_flag_{:}'.format(i - 6)] = SingleInt(header[i])
-        return MeshRecord(child)
+        # In some files, (dlc02\\graphics\\buildings\\cultural\\cultural_03\\cultural_03_module_04\\cultural_03_module_04_h\\rdm\\cultural_03_module_04_j.rdm for example)
+        # Several meshes are defined with one group, the other contains one mesh with several groups.
+        headers = IntArray.parse(data, offset)
+        def get_child(header):
+            child = {'strings': StringRecord.parse(data, header[0]),
+                     'unknown_0': UnknownRecord.parse(data, header[1]),
+                     'unknown_1': IntArray.parse(data, header[2]),
+                     'vertices': DataArray.parse(data, header[3]),
+                     'faces': DataArray.parse(data, header[4]),
+                     'groups': GroupRecord.parse(data, header[5])
+                     }
+            for i in range(6, len(header)):
+                child['unknown_flag_{:}'.format(i - 6)] = SingleInt(header[i])
+            return child
+
+        if len(headers) == 1:
+            return MeshRecord(get_child(headers[0]))
+        elif len(headers) > 1:
+            return [MeshRecord(get_child(h)) for h in headers]
+        else:
+            return None
 
     # For some reason, vertices are encoded afters groups in the binary file
     def pack(self, data):
