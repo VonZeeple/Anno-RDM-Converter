@@ -98,12 +98,12 @@ def obj_to_rdm(obj_file):
                                          'tex': convert_uv(obj_t[v[1] - 1]),
                                          'tan': padding(tan, 4),
                                          'bitan': padding(bitan, 4),
-                                         'unknown_I': (0, 0, 0, 0)}).pack()
+                                         'unknown_I': (0, 0, 0, 0)}).encode()
                     rdm_vertices.append(vertex)
                     vertices.append(v)
                     new_index = len(vertices) - 1
 
-                faces.append(rdm.VertexIndex(format='H', index=new_index).pack())
+                faces.append(rdm.VertexIndex(format='H', index=new_index).encode())
                 n += 1
 
         name = rdm.AnnoString('group_{:}'.format(i).encode('ascii'))
@@ -138,11 +138,12 @@ def obj_to_rdm(obj_file):
     return rdm_file
 
 
-def rdm_to_obj(rdm_file):
-    raw_vertices = rdm_file.main_record.get('mesh', {}).get('vertices')
-    vertices = [rdm.Vertex.parse(data) for data in raw_vertices]
-    groups = list(rdm_file.main_record.get('mesh', {}).get('groups', {}).values())
-    raw_faces = rdm_file.main_record.get('mesh', {}).get('faces')
+def rdm_to_obj(rdm_file,*arg,**kwarg):
+    #TODO: Mesh record now contains a list of meshes
+    raw_vertices = rdm_file.main_record.get('mesh', [{}])[0].get('vertices')
+    vertices = [rdm.Vertex.decode(data, *arg,**kwarg) for data in raw_vertices]
+    groups = list(rdm_file.main_record.get('mesh', [{}])[0].get('groups', {}).values())
+    raw_faces = rdm_file.main_record.get('mesh', [{}])[0].get('faces')
     faces_v_indices = [unpack_v_index(data) for data in raw_faces]
     materials = list(rdm_file.main_record.get('materials', {}).values())
 

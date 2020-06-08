@@ -5,13 +5,11 @@ import os
 data_path = "D:\\modding\\Anno1800\\data_Anno1800\\data\\"
 
 
-
 def get_all_rdm_files():
     if not os.path.exists("tests\\files_to_test.txt"):
         find_all_files("tests\\files_to_test.txt")
     with open("tests\\files_to_test.txt", 'r') as f:
-        filenames = f.read().split('\n')[::-1]
-
+        filenames = f.read().split('\n')[:-1]
     return filenames
 
 
@@ -24,13 +22,13 @@ def find_all_files(out_filename):
 
 
 # We check that all rdm files from anno 1800 can be parsed without error
-# We first avoid animation files
-@pytest.mark.parametrize("filename", get_all_rdm_files())
+# We discard files for animations
+@pytest.mark.parametrize("filename", [s for s in get_all_rdm_files() if s.find("anim") == -1])
 def test_parse_file(filename):
-    if filename.find("anim") == -1:
         rdm.load_rdm_file(os.path.join(data_path, filename))
-    else:
-        pass
+
+# TODO: check that the file is the same bitwise after parsing and re-encoding.
+
 
 
 

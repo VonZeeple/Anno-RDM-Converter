@@ -14,15 +14,17 @@ class IntegerArrayError(Exception):
 class VertexSizeError(Exception):
     pass
 
-
+class TriangleSizeError(Exception):
+    pass
 class VertexPackingError(Exception):
     pass
 
-
+# Note: 24bytes can correspond to P4h_N4b_T2h_I4b_W4b (from anno 2070)
 vertex_formats = {8: r'P4h',
                   16: r'P4h_T2h_C4c',
                   20: r'P4h_N4b_T2h_I4b',
                   24: r'P4h_N4b_G4b_B4b_T2h',
+                  #24: r'P4h_N4b_T2h_I4b_W4b',
                   28: r'P4h_N4b_G4b_B4b_T2h_I4b',
                   32: r'P4h_N4b_G4b_B4b_T2h_C4b_C4b',
                   56: r'P4h_N4b_G4b_B4b_T2h_I4b_I4b_I4b_I4b_W4b_W4b_W4b_W4b',
@@ -38,14 +40,18 @@ data_size = {'e': 2, 'f': 4, 'b': 1, 'B': 1, 'c': 1}
 # TODO use dataclass
 class Vertex(dict):
     @staticmethod
-    def parse(data):
+    def decode(data, *arg, **kwarg):
         v_size = len(data)
-        if v_size not in vertex_formats.keys():
-            raise VertexSizeError
 
-        letter_to_arg = {'P': 'pos', 'T': 'tex', 'N': 'norm', 'I': 'unknown_I', 'G': 'tan', 'B': 'bitan'}
-        format_str = vertex_formats[v_size]
+        if 'vertex_format' in kwarg:
+            format_str = kwarg.get('vertex_format')
+        else:
+            if v_size not in vertex_formats.keys():
+                raise VertexSizeError
+            format_str = vertex_formats[v_size]
+
         vertex_arg = {'vformat': format_str}
+        letter_to_arg = {'P': 'pos', 'T': 'tex', 'N': 'norm', 'I': 'unknown_I', 'G': 'tan', 'B': 'bitan'}
         i = 0
         for s in format_str.replace('h', 'e').replace('b', 'B').split('_'):
             # TODO: implement regex for >56 bytes vertex
@@ -55,7 +61,7 @@ class Vertex(dict):
             i += num_data * data_size[s[2]]
         return Vertex(vertex_arg)
 
-    def pack(self):
+    def encode(self):
         format_str = self['vformat']
         letter_to_arg = {'P': 'pos', 'T': 'tex', 'N': 'norm', 'I': 'unknown_I', 'G': 'tan', 'B': 'bitan'}
         out = bytearray()
@@ -65,10 +71,6 @@ class Vertex(dict):
         if len(out) != vertex_length[format_str]:
             raise VertexPackingError
         return out
-
-
-class TriangleSizeError(Exception):
-    pass
 
 
 vertex_index_formats = {2: r'H',
@@ -81,14 +83,14 @@ class VertexIndex(NamedTuple):
     index: int
 
     @staticmethod
-    def parse(data):
+    def decode(data):
         t_size = int(len(data))
         if t_size not in vertex_index_formats.keys():
             raise TriangleSizeError
         index, = unpack(vertex_index_formats[t_size], data)
         return VertexIndex(format=vertex_index_formats[t_size], index=index)
 
-    def pack(self):
+    def encode(self):
         out = pack(self.format, self.index)
         return out
 
@@ -253,6 +255,8 @@ class MeshRecord(Record):
 
     @staticmethod
     def parse(data, offset):
+        if offset == 0:
+            return None
         # In some files, (dlc02\\graphics\\buildings\\cultural\\cultural_03\\cultural_03_module_04\\cultural_03_module_04_h\\rdm\\cultural_03_module_04_j.rdm for example)
         # Several meshes are defined with one group, the other contains one mesh with several groups.
         headers = IntArray.parse(data, offset)
@@ -268,12 +272,7 @@ class MeshRecord(Record):
                 child['unknown_flag_{:}'.format(i - 6)] = SingleInt(header[i])
             return child
 
-        if len(headers) == 1:
-            return MeshRecord(get_child(headers[0]))
-        elif len(headers) > 1:
-            return [MeshRecord(get_child(h)) for h in headers]
-        else:
-            return None
+        return [MeshRecord(get_child(h)) for h in headers]
 
     # For some reason, vertices are encoded afters groups in the binary file
     def pack(self, data):
@@ -358,6 +357,8 @@ class MaterialsRecord(Record):
 
     @staticmethod
     def parse(data, offset):
+        if offset == 0:
+            return None
         header = IntArray.parse(data, offset)
         materials = {}
         for i, h in enumerate(header):
@@ -395,6 +396,7 @@ class MainRecord(Record):
             'mesh': MeshRecord.parse(data, header[1]),
             'materials': MaterialsRecord.parse(data, header[2])
         }
+        # TODO: header[4] seems to be important for anim files and is not 0
         for i in range(12 - 3):
             child['unknown_{:}'.format(i + 1)] = None
         return MainRecord(child)
